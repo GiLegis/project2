@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Client } from '../../types';
 import { Button } from '../ui/Button';
-import citiesData from '../../utils/brazil-cities.json'; // Importamos nossa lista de cidades
+import citiesData from '../../utils/brazil-cities.json';
+
+// Objeto para mapear o código da UF para a sigla, como você sugeriu.
+const codigoUfParaSigla: { [key: number]: string } = {
+    11: 'RO', 12: 'AC', 13: 'AM', 14: 'RR', 15: 'PA', 16: 'AP', 17: 'TO',
+    21: 'MA', 22: 'PI', 23: 'CE', 24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL', 28: 'SE', 29: 'BA',
+    31: 'MG', 32: 'ES', 33: 'RJ', 35: 'SP',
+    41: 'PR', 42: 'SC', 43: 'RS',
+    50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF'
+};
 
 interface ClientFormProps {
   client: Omit<Client, 'id' | 'createdAt' | 'createdBy'> | null;
@@ -22,32 +31,37 @@ export const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSave 
     estado: client?.estado || '',
   });
 
-  // Lógica para os menus de seleção de Estado e Cidade
+  // Gera a lista de UFs a partir do nosso mapa de códigos
   const states = useMemo(() => {
-    const stateSet = new Set(citiesData.map(city => city.estado));
-    return Array.from(stateSet).sort();
+    return Object.values(codigoUfParaSigla).sort();
   }, []);
 
   const [availableCities, setAvailableCities] = useState<string[]>([]);
 
   useEffect(() => {
     if (formData.estado) {
-      const citiesInState = citiesData
-        .filter(city => city.estado === formData.estado)
-        .map(city => city.cidade)
-        .sort();
-      setAvailableCities(citiesInState);
+      // Encontra o código UF correspondente à sigla do estado selecionado
+      const ufCode = Object.keys(codigoUfParaSigla).find(key => codigoUfParaSigla[parseInt(key)] === formData.estado);
+      
+      if (ufCode) {
+        // Filtra as cidades usando o código UF numérico
+        const citiesInState = citiesData
+          .filter(city => city.codigo_uf === parseInt(ufCode))
+          .map(city => city.nome)
+          .sort();
+        setAvailableCities(citiesInState);
+      }
     } else {
       setAvailableCities([]);
     }
   }, [formData.estado]);
-
+  
   const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newState = e.target.value;
     setFormData(prev => ({
       ...prev,
       estado: newState,
-      cidade: '' // Reseta a cidade ao trocar de estado
+      cidade: ''
     }));
   };
   
@@ -66,13 +80,10 @@ export const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSave 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="md:col-span-2">
-        <label htmlFor="nomeCompleto" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Nome Completo *
-        </label>
-        <input type="text" name="nomeCompleto" value={formData.nomeCompleto} onChange={handleChange} required className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+      <div>
+          <label htmlFor="nomeCompleto" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome Completo *</label>
+          <input type="text" name="nomeCompleto" value={formData.nomeCompleto} onChange={handleChange} required className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
@@ -84,24 +95,19 @@ export const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSave 
         </div>
       </div>
       
-      {/* CAMPOS DE ESTADO E CIDADE COM A NOVA LÓGICA DE SELEÇÃO */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="estado" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Estado</label>
           <select name="estado" value={formData.estado} onChange={handleStateChange} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent">
             <option value="">Selecione um estado</option>
-            {states.map(state => (
-              <option key={state} value={state}>{state}</option>
-            ))}
+            {states.map(state => (<option key={state} value={state}>{state}</option>))}
           </select>
         </div>
         <div>
           <label htmlFor="cidade" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
           <select name="cidade" value={formData.cidade} onChange={handleChange} disabled={!formData.estado} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-200 dark:disabled:bg-gray-800">
             <option value="">{formData.estado ? 'Selecione uma cidade' : 'Selecione um estado primeiro'}</option>
-            {availableCities.map(city => (
-              <option key={city} value={city}>{city}</option>
-            ))}
+            {availableCities.map(city => (<option key={city} value={city}>{city}</option>))}
           </select>
         </div>
       </div>
@@ -120,7 +126,7 @@ export const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSave 
         </div>
       </div>
       
-      <div className="md:col-span-2">
+      <div>
         <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Observações</label>
         <textarea name="observacoes" value={formData.observacoes} onChange={handleChange} rows={3} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
       </div>
