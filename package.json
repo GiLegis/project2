@@ -12,8 +12,8 @@
   "dependencies": {
     "firebase": "^10.7.1",
     "framer-motion": "^10.16.16",
-    "jspdf": "^3.0.1",
-    "jspdf-autotable": "^5.0.2",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "lucide-react": "^0.344.0",
