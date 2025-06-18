@@ -66,40 +66,276 @@ export const OpportunitiesKanban: React.FC = () => {
   };
   
   const handleGeneratePdf = () => {
+    const currentDate = new Date();
+    const reportDate = new Date(selectedYear, selectedMonth);
+    const previousMonth = new Date(selectedYear, selectedMonth - 1);
+    
+    // Filtrar dados do mês selecionado
     const opportunitiesInPeriod = opportunities.filter(opp => {
       const oppDate = new Date(opp.createdAt);
       return oppDate.getMonth() === selectedMonth && oppDate.getFullYear() === selectedYear;
     });
 
-    if (opportunitiesInPeriod.length === 0) {
-      alert(`Nenhuma oportunidade encontrada para ${months[selectedMonth]} de ${selectedYear}.`);
+    const clientsInPeriod = clients.filter(client => {
+      const clientDate = new Date(client.createdAt);
+      return clientDate.getMonth() === selectedMonth && clientDate.getFullYear() === selectedYear;
+    });
+
+    // Filtrar dados do mês anterior para comparação
+    const opportunitiesPreviousMonth = opportunities.filter(opp => {
+      const oppDate = new Date(opp.createdAt);
+      return oppDate.getMonth() === previousMonth.getMonth() && oppDate.getFullYear() === previousMonth.getFullYear();
+    });
+
+    const clientsPreviousMonth = clients.filter(client => {
+      const clientDate = new Date(client.createdAt);
+      return clientDate.getMonth() === previousMonth.getMonth() && clientDate.getFullYear() === previousMonth.getFullYear();
+    });
+
+    if (opportunitiesInPeriod.length === 0 && clientsInPeriod.length === 0) {
+      alert(`Nenhum dado encontrado para ${months[selectedMonth]} de ${selectedYear}.`);
       return;
     }
 
     const doc = new jsPDF();
-    const wonCount = opportunitiesInPeriod.filter(o => o.status === 'fechado-ganhou').length;
-    const lostCount = opportunitiesInPeriod.filter(o => o.status === 'fechado-perdeu').length;
-    const totalValueWon = opportunitiesInPeriod.filter(o => o.status === 'fechado-ganhou').reduce((sum, o) => sum + o.value, 0);
+    let yPosition = 20;
 
-    doc.setFontSize(18);
-    doc.text(`Relatório de Oportunidades - ${months[selectedMonth]}/${selectedYear}`, 14, 22);
+    // Cabeçalho do relatório
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RELATÓRIO EXECUTIVO DE VENDAS', 105, yPosition, { align: 'center' });
+    yPosition += 10;
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Período: ${months[selectedMonth]}/${selectedYear}`, 105, yPosition, { align: 'center' });
+    yPosition += 5;
+
+    doc.setFontSize(10);
+    doc.text(`Gerado em: ${currentDate.toLocaleDateString('pt-BR')} às ${currentDate.toLocaleTimeString('pt-BR')}`, 105, yPosition, { align: 'center' });
+    yPosition += 20;
+
+    // Resumo Executivo
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RESUMO EXECUTIVO', 14, yPosition);
+    yPosition += 10;
+
+    // Métricas principais
+    const wonOpportunities = opportunitiesInPeriod.filter(o => o.status === 'fechado-ganhou');
+    const lostOpportunities = opportunitiesInPeriod.filter(o => o.status === 'fechado-perdeu');
+    const totalValueWon = wonOpportunities.reduce((sum, o) => sum + o.value, 0);
+    const totalValueLost = lostOpportunities.reduce((sum, o) => sum + o.value, 0);
     
+    // Métricas do mês anterior
+    const wonOpportunitiesPrev = opportunitiesPreviousMonth.filter(o => o.status === 'fechado-ganhou');
+    const totalValueWonPrev = wonOpportunitiesPrev.reduce((sum, o) => sum + o.value, 0);
+
+    // Cálculos de crescimento
+    const clientGrowth = clientsPreviousMonth.length > 0 
+      ? ((clientsInPeriod.length - clientsPreviousMonth.length) / clientsPreviousMonth.length * 100).toFixed(1)
+      : clientsInPeriod.length > 0 ? '100.0' : '0.0';
+
+    const revenueGrowth = totalValueWonPrev > 0 
+      ? ((totalValueWon - totalValueWonPrev) / totalValueWonPrev * 100).toFixed(1)
+      : totalValueWon > 0 ? '100.0' : '0.0';
+
+    const conversionRate = opportunitiesInPeriod.length > 0 
+      ? (wonOpportunities.length / opportunitiesInPeriod.length * 100).toFixed(1)
+      : '0.0';
+
     doc.setFontSize(11);
-    doc.text(`Total de Oportunidades no período: ${opportunitiesInPeriod.length}`, 14, 32);
-    doc.text(`Negócios Ganhos: ${wonCount}`, 14, 38);
-    doc.text(`Negócios Perdidos: ${lostCount}`, 14, 44);
-    doc.text(`Valor Total Ganho: R$ ${totalValueWon.toLocaleString()}`, 14, 50);
+    doc.setFont('helvetica', 'normal');
 
-    const tableColumn = ["Nome da Oportunidade", "Cliente", "Valor (R$)", "Status"];
-    const tableRows: (string | number)[][] = [];
+    const summaryData = [
+      ['Métrica', 'Valor Atual', 'Mês Anterior', 'Variação'],
+      ['Novos Clientes', clientsInPeriod.length.toString(), clientsPreviousMonth.length.toString(), `${clientGrowth}%`],
+      ['Oportunidades Criadas', opportunitiesInPeriod.length.toString(), opportunitiesPreviousMonth.length.toString(), `${((opportunitiesInPeriod.length - opportunitiesPreviousMonth.length) / Math.max(opportunitiesPreviousMonth.length, 1) * 100).toFixed(1)}%`],
+      ['Vendas Fechadas', wonOpportunities.length.toString(), wonOpportunitiesPrev.length.toString(), `${((wonOpportunities.length - wonOpportunitiesPrev.length) / Math.max(wonOpportunitiesPrev.length, 1) * 100).toFixed(1)}%`],
+      ['Receita Total', `R$ ${totalValueWon.toLocaleString('pt-BR')}`, `R$ ${totalValueWonPrev.toLocaleString('pt-BR')}`, `${revenueGrowth}%`],
+      ['Taxa de Conversão', `${conversionRate}%`, `${opportunitiesPreviousMonth.length > 0 ? (wonOpportunitiesPrev.length / opportunitiesPreviousMonth.length * 100).toFixed(1) : '0.0'}%`, '-']
+    ];
 
-    opportunitiesInPeriod.forEach(opp => {
-      const opportunityData = [ opp.name, opp.clientName, opp.value.toLocaleString(), stages.find(s => s.id === opp.status)?.name || opp.status ];
-      tableRows.push(opportunityData);
+    doc.autoTable({
+      head: [summaryData[0]],
+      body: summaryData.slice(1),
+      startY: yPosition,
+      theme: 'grid',
+      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        3: { 
+          cellPadding: 3,
+          didParseCell: function(data: any) {
+            if (data.cell.text[0] && data.cell.text[0].includes('%')) {
+              const value = parseFloat(data.cell.text[0]);
+              if (value > 0) {
+                data.cell.styles.textColor = [34, 197, 94]; // Verde
+              } else if (value < 0) {
+                data.cell.styles.textColor = [239, 68, 68]; // Vermelho
+              }
+            }
+          }
+        }
+      }
     });
 
-    doc.autoTable({ head: [tableColumn], body: tableRows, startY: 60 });
-    doc.save(`relatorio_oportunidades_${months[selectedMonth]}_${selectedYear}.pdf`);
+    yPosition = (doc as any).lastAutoTable.finalY + 15;
+
+    // Análise Detalhada por Dia
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ANÁLISE DIÁRIA DETALHADA', 14, yPosition);
+    yPosition += 10;
+
+    // Agrupar dados por dia
+    const dailyData: { [key: string]: { clients: number; opportunities: number; revenue: number } } = {};
+    
+    // Processar clientes por dia
+    clientsInPeriod.forEach(client => {
+      const date = new Date(client.createdAt).toLocaleDateString('pt-BR');
+      if (!dailyData[date]) {
+        dailyData[date] = { clients: 0, opportunities: 0, revenue: 0 };
+      }
+      dailyData[date].clients++;
+    });
+
+    // Processar oportunidades por dia
+    opportunitiesInPeriod.forEach(opp => {
+      const date = new Date(opp.createdAt).toLocaleDateString('pt-BR');
+      if (!dailyData[date]) {
+        dailyData[date] = { clients: 0, opportunities: 0, revenue: 0 };
+      }
+      dailyData[date].opportunities++;
+      if (opp.status === 'fechado-ganhou') {
+        dailyData[date].revenue += opp.value;
+      }
+    });
+
+    // Criar tabela de dados diários
+    const dailyTableData = Object.entries(dailyData)
+      .sort(([a], [b]) => new Date(a.split('/').reverse().join('-')).getTime() - new Date(b.split('/').reverse().join('-')).getTime())
+      .map(([date, data]) => [
+        date,
+        data.clients.toString(),
+        data.opportunities.toString(),
+        `R$ ${data.revenue.toLocaleString('pt-BR')}`
+      ]);
+
+    if (dailyTableData.length > 0) {
+      doc.autoTable({
+        head: [['Data', 'Novos Clientes', 'Oportunidades', 'Receita Fechada']],
+        body: dailyTableData,
+        startY: yPosition,
+        theme: 'striped',
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 3 },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { halign: 'center' },
+          2: { halign: 'center' },
+          3: { halign: 'right' }
+        }
+      });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 15;
+    }
+
+    // Nova página se necessário
+    if (yPosition > 250) {
+      doc.addPage();
+      yPosition = 20;
+    }
+
+    // Análise por Status das Oportunidades
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PIPELINE DE VENDAS', 14, yPosition);
+    yPosition += 10;
+
+    const pipelineData = stages.map(stage => {
+      const stageOpportunities = opportunitiesInPeriod.filter(opp => opp.status === stage.id);
+      const stageValue = stageOpportunities.reduce((sum, opp) => sum + opp.value, 0);
+      return [
+        stage.name,
+        stageOpportunities.length.toString(),
+        `R$ ${stageValue.toLocaleString('pt-BR')}`,
+        opportunitiesInPeriod.length > 0 ? `${(stageOpportunities.length / opportunitiesInPeriod.length * 100).toFixed(1)}%` : '0%'
+      ];
+    });
+
+    doc.autoTable({
+      head: [['Status', 'Quantidade', 'Valor Total', '% do Total']],
+      body: pipelineData,
+      startY: yPosition,
+      theme: 'grid',
+      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        1: { halign: 'center' },
+        2: { halign: 'right' },
+        3: { halign: 'center' }
+      }
+    });
+
+    yPosition = (doc as any).lastAutoTable.finalY + 15;
+
+    // Insights e Recomendações
+    if (yPosition > 220) {
+      doc.addPage();
+      yPosition = 20;
+    }
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('INSIGHTS E RECOMENDAÇÕES', 14, yPosition);
+    yPosition += 10;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+
+    const insights = [];
+    
+    if (parseFloat(clientGrowth) > 0) {
+      insights.push(`✓ Crescimento positivo de ${clientGrowth}% em novos clientes comparado ao mês anterior.`);
+    } else if (parseFloat(clientGrowth) < 0) {
+      insights.push(`⚠ Redução de ${Math.abs(parseFloat(clientGrowth))}% em novos clientes. Revisar estratégias de aquisição.`);
+    }
+
+    if (parseFloat(revenueGrowth) > 0) {
+      insights.push(`✓ Receita cresceu ${revenueGrowth}% em relação ao mês anterior.`);
+    } else if (parseFloat(revenueGrowth) < 0) {
+      insights.push(`⚠ Receita diminuiu ${Math.abs(parseFloat(revenueGrowth))}%. Focar em conversão de leads.`);
+    }
+
+    if (parseFloat(conversionRate) > 20) {
+      insights.push(`✓ Excelente taxa de conversão de ${conversionRate}%.`);
+    } else if (parseFloat(conversionRate) < 10) {
+      insights.push(`⚠ Taxa de conversão baixa (${conversionRate}%). Revisar processo de qualificação.`);
+    }
+
+    const openOpportunities = opportunitiesInPeriod.filter(o => !['fechado-ganhou', 'fechado-perdeu'].includes(o.status));
+    if (openOpportunities.length > 0) {
+      insights.push(`→ ${openOpportunities.length} oportunidades ainda em aberto com potencial de R$ ${openOpportunities.reduce((sum, o) => sum + o.value, 0).toLocaleString('pt-BR')}.`);
+    }
+
+    insights.forEach(insight => {
+      doc.text(insight, 14, yPosition, { maxWidth: 180 });
+      yPosition += 7;
+    });
+
+    // Rodapé
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+      doc.text('Atractive CRM - Relatório Confidencial', 14, 290);
+    }
+
+    doc.save(`relatorio_completo_${months[selectedMonth]}_${selectedYear}.pdf`);
     setIsReportModalOpen(false);
   };
 
@@ -135,7 +371,7 @@ export const OpportunitiesKanban: React.FC = () => {
         </div>
         <div className="flex gap-2">
             <Button onClick={() => setIsReportModalOpen(true)} variant='outline' className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4" /> Gerar Relatório
+                <BarChart2 className="w-4 h-4" /> Relatório Executivo
             </Button>
             <Button onClick={handleAddOpportunity} className="flex items-center gap-2">
                 <Plus className="w-4 h-4" /> Nova Oportunidade
@@ -204,20 +440,68 @@ export const OpportunitiesKanban: React.FC = () => {
         <OpportunityForm opportunity={selectedOpportunity} onClose={() => setIsOpportunityModalOpen(false)} onSave={handleSaveOpportunity} />
       </Modal>
 
-      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title="Gerar Relatório de Oportunidades">
-        <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">Selecione o período para gerar o relatório em PDF.</p>
-            <div className="flex gap-4 items-center">
-                <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500">
-                    {months.map((month, index) => <option key={month} value={index}>{month}</option>)}
-                </select>
-                <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500">
-                    {years.map(year => <option key={year} value={year}>{year}</option>)}
-                </select>
+      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title="Gerar Relatório Executivo" size="md">
+        <div className="space-y-6">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">📊 Relatório Completo</h4>
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                    Este relatório incluirá análises detalhadas por dia, comparativos com o mês anterior, 
+                    métricas de crescimento e insights estratégicos.
+                </p>
             </div>
-             <div className="flex justify-end gap-3 pt-4">
-                <Button variant="ghost" onClick={() => setIsReportModalOpen(false)}>Cancelar</Button>
-                <Button onClick={handleGeneratePdf}>Gerar PDF</Button>
+            
+            <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    Selecione o período para análise:
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Mês</label>
+                        <select 
+                            value={selectedMonth} 
+                            onChange={(e) => setSelectedMonth(Number(e.target.value))} 
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500"
+                        >
+                            {months.map((month, index) => (
+                                <option key={month} value={index}>{month}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Ano</label>
+                        <select 
+                            value={selectedYear} 
+                            onChange={(e) => setSelectedYear(Number(e.target.value))} 
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500"
+                        >
+                            {years.map(year => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-2">O relatório incluirá:</h5>
+                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <li>• Resumo executivo com métricas principais</li>
+                    <li>• Análise diária detalhada de clientes e oportunidades</li>
+                    <li>• Comparativo com o mês anterior</li>
+                    <li>• Pipeline de vendas por status</li>
+                    <li>• Insights e recomendações estratégicas</li>
+                    <li>• Gráficos de crescimento e tendências</li>
+                </ul>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button variant="ghost" onClick={() => setIsReportModalOpen(false)}>
+                    Cancelar
+                </Button>
+                <Button onClick={handleGeneratePdf} className="flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4" />
+                    Gerar Relatório PDF
+                </Button>
             </div>
         </div>
       </Modal>
