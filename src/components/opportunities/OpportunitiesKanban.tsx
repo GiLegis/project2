@@ -1,21 +1,39 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, DollarSign, Calendar, User, Edit } from 'lucide-react';
+import { Plus, DollarSign, Calendar, User, Edit, BarChart2, Flag } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { OpportunityForm } from './OpportunityForm';
 import { useData } from '../../contexts/DataContext';
 import { Opportunity } from '../../types';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
+// Adiciona a função autoTable ao tipo do jsPDF para o TypeScript
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
+
+interface ReportData {
+  totalOpportunities: number;
+  won: number;
+  lost: number;
+  open: number;
+  totalValueWon: number;
+}
 
 const stages = [
-  { id: 'novo-lead', name: 'Novo Lead', color: 'bg-blue-500' },
-  { id: 'contato-inicial', name: 'Contato Inicial', color: 'bg-indigo-500' },
-  { id: 'qualificacao', name: 'Qualificação', color: 'bg-purple-500' },
-  { id: 'proposta', name: 'Proposta', color: 'bg-yellow-500' },
-  { id: 'negociacao', name: 'Negociação', color: 'bg-orange-500' },
-  { id: 'fechado-ganhou', name: 'Fechado (Ganhou)', color: 'bg-green-500' },
-  { id: 'fechado-perdeu', name: 'Fechado (Perdeu)', color: 'bg-red-500' }
+    { id: 'novo-lead', name: 'Novo Lead', color: 'bg-blue-500' },
+    { id: 'contato-inicial', name: 'Contato Inicial', color: 'bg-indigo-500' },
+    { id: 'qualificacao', name: 'Qualificação', color: 'bg-purple-500' },
+    { id: 'proposta', name: 'Proposta', color: 'bg-yellow-500' },
+    { id: 'negociacao', name: 'Negociação', color: 'bg-orange-500' },
+    { id: 'fechado-ganhou', name: 'Fechado (Ganhou)', color: 'bg-green-500' },
+    { id: 'fechado-perdeu', name: 'Fechado (Perdeu)', color: 'bg-red-500' }
 ];
 
 export const OpportunitiesKanban: React.FC = () => {
@@ -23,7 +41,10 @@ export const OpportunitiesKanban: React.FC = () => {
   
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
-  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
   const handleAddOpportunity = () => {
     setSelectedOpportunity(null);
@@ -43,93 +64,162 @@ export const OpportunitiesKanban: React.FC = () => {
     }
     setIsOpportunityModalOpen(false);
   };
+  
+  const handleGeneratePdf = () => {
+    const opportunitiesInPeriod = opportunities.filter(opp => {
+      const oppDate = new Date(opp.createdAt);
+      return oppDate.getMonth() === selectedMonth && oppDate.getFullYear() === selectedYear;
+    });
 
-  const handleDrop = (e: React.DragEvent, newStatus: string) => {
-    e.preventDefault();
-    if (draggedItem) {
-      const opportunityToUpdate = opportunities.find(opp => opp.id === draggedItem);
-      if (opportunityToUpdate) {
-        updateOpportunity({ ...opportunityToUpdate, status: newStatus });
-        if (newStatus === 'fechado-ganhou') {
-          const clientToUpdate = clients.find(c => c.nomeCompleto === opportunityToUpdate.clientName);
-          if (clientToUpdate) {
-            updateClient({ ...clientToUpdate, status: 'Fechado (Ganhou)' });
-          }
+    if (opportunitiesInPeriod.length === 0) {
+      alert(`Nenhuma oportunidade encontrada para ${months[selectedMonth]} de ${selectedYear}.`);
+      return;
+    }
+
+    const doc = new jsPDF();
+    const wonCount = opportunitiesInPeriod.filter(o => o.status === 'fechado-ganhou').length;
+    const lostCount = opportunitiesInPeriod.filter(o => o.status === 'fechado-perdeu').length;
+    const totalValueWon = opportunitiesInPeriod.filter(o => o.status === 'fechado-ganhou').reduce((sum, o) => sum + o.value, 0);
+
+    doc.setFontSize(18);
+    doc.text(`Relatório de Oportunidades - ${months[selectedMonth]}/${selectedYear}`, 14, 22);
+    
+    doc.setFontSize(11);
+    doc.text(`Total de Oportunidades no período: ${opportunitiesInPeriod.length}`, 14, 32);
+    doc.text(`Negócios Ganhos: ${wonCount}`, 14, 38);
+    doc.text(`Negócios Perdidos: ${lostCount}`, 14, 44);
+    doc.text(`Valor Total Ganho: R$ ${totalValueWon.toLocaleString()}`, 14, 50);
+
+    const tableColumn = ["Nome da Oportunidade", "Cliente", "Valor (R$)", "Status"];
+    const tableRows: (string | number)[][] = [];
+
+    opportunitiesInPeriod.forEach(opp => {
+      const opportunityData = [ opp.name, opp.clientName, opp.value.toLocaleString(), stages.find(s => s.id === opp.status)?.name || opp.status ];
+      tableRows.push(opportunityData);
+    });
+
+    doc.autoTable({ head: [tableColumn], body: tableRows, startY: 60 });
+    doc.save(`relatorio_oportunidades_${months[selectedMonth]}_${selectedYear}.pdf`);
+    setIsReportModalOpen(false);
+  };
+
+  const months = [ "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro" ];
+  const years = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2];
+
+  const onDragEnd = (result: DropResult) => {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+    
+    const opportunity = opportunities.find(opp => opp.id === draggableId);
+
+    if (opportunity) {
+        const updatedOpportunity = { ...opportunity, status: destination.droppableId };
+        updateOpportunity(updatedOpportunity);
+
+        if (destination.droppableId === 'fechado-ganhou') {
+            const clientToUpdate = clients.find(c => c.nomeCompleto === updatedOpportunity.clientName);
+            if (clientToUpdate) {
+                updateClient({ ...clientToUpdate, status: 'Fechado (Ganhou)' });
+            }
         }
-      }
-      setDraggedItem(null);
     }
   };
-  
-  const handleDragStart = (e: React.DragEvent, opportunityId: string) => {
-    setDraggedItem(opportunityId);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const getOpportunitiesByStatus = (status: string) => opportunities.filter(opp => opp.status === status);
-  const getTotalValueByStatus = (status: string) => getOpportunitiesByStatus(status).reduce((sum, opp) => sum + opp.value, 0);
 
   return (
     <div className="p-6 space-y-6">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Pipeline de Oportunidades</h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie suas oportunidades de vendas</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Arraste os cards para gerenciar suas vendas</p>
         </div>
-        <Button onClick={handleAddOpportunity} className="flex items-center gap-2"><Plus className="w-4 h-4" /> Nova Oportunidade</Button>
-      </motion.div>
-
-      <div className="flex gap-6 overflow-x-auto pb-4">
-        {stages.map((stage) => {
-          const stageOpportunities = getOpportunitiesByStatus(stage.id);
-          const totalValue = getTotalValueByStatus(stage.id);
-          return (
-            <div key={stage.id} className="flex-shrink-0 w-80">
-              <Card className="h-full bg-gray-50 dark:bg-gray-800/50">
-                <div onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, stage.id)} className="p-4 border-b border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-3 h-3 rounded-full ${stage.color}`} />
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">{stage.name}</h3>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">({stageOpportunities.length})</span>
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Total: R$ {totalValue.toLocaleString()}</div>
-                </div>
-                <div className="p-4 space-y-3 min-h-[400px]">
-                  <AnimatePresence>
-                    {stageOpportunities.map((opportunity) => (
-                      // AQUI ESTÁ A MUDANÇA PRINCIPAL: trocamos motion.div por div
-                      <div
-                        key={opportunity.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, opportunity.id)}
-                        className={`p-4 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${draggedItem === opportunity.id ? 'opacity-50' : ''}`}
-                      >
-                         <div className="flex justify-between items-start mb-3">
-                          <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm">{opportunity.name}</h4>
-                          <button onClick={() => handleEditOpportunity(opportunity)} className="p-1 text-gray-400 hover:text-primary-600"><Edit className="w-3 h-3" /></button>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400"><User className="w-3 h-3" /><span>{opportunity.clientName}</span></div>
-                          <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400"><DollarSign className="w-3 h-3" /><span className="font-medium">R$ {opportunity.value.toLocaleString()}</span></div>
-                          {opportunity.expectedCloseDate && <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400"><Calendar className="w-3 h-3" /><span>{new Date(opportunity.expectedCloseDate).toLocaleDateString()}</span></div>}
-                          {opportunity.nextAction && (<div className="mt-2 p-2 bg-gray-50 dark:bg-gray-600 rounded text-xs text-gray-700 dark:text-gray-300"><strong>Próxima ação:</strong> {opportunity.nextAction}</div>)}
-                        </div>
-                      </div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </Card>
-            </div>
-          );
-        })}
+        <div className="flex gap-2">
+            <Button onClick={() => setIsReportModalOpen(true)} variant='outline' className="flex items-center gap-2">
+                <BarChart2 className="w-4 h-4" /> Gerar Relatório
+            </Button>
+            <Button onClick={handleAddOpportunity} className="flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Nova Oportunidade
+            </Button>
+        </div>
       </div>
+      
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="flex gap-6 overflow-x-auto pb-4">
+          {stages.map(stage => {
+            const stageOpportunities = opportunities.filter(op => op.status === stage.id);
+            const totalValue = stageOpportunities.reduce((sum, opp) => sum + opp.value, 0);
+            return (
+              <Droppable key={stage.id} droppableId={stage.id}>
+                {(provided, snapshot) => (
+                  <div className="flex-shrink-0 w-80">
+                    <Card className={`h-full flex flex-col transition-colors ${snapshot.isDraggingOver ? 'bg-primary-100/50 dark:bg-primary-900/20' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
+                      <div className="p-4 border-b-4" style={{ borderColor: stage.color.replace('bg-', '') }}>
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{stage.name}</h3>
+                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-full">{stageOpportunities.length}</span>
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400 font-medium">R$ {totalValue.toLocaleString()}</div>
+                      </div>
+                      <div 
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className="p-3 space-y-3 flex-1 overflow-y-auto min-h-[400px]"
+                      >
+                        {stageOpportunities.map((opportunity, index) => (
+                          <Draggable key={opportunity.id} draggableId={opportunity.id} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                style={{ ...provided.draggableProps.style }}
+                                className={`p-4 bg-white dark:bg-gray-900 rounded-lg shadow-md cursor-grab active:cursor-grabbing hover:shadow-lg transition-shadow ${snapshot.isDragging ? 'ring-2 ring-primary-500 shadow-xl' : 'shadow-sm'}`}
+                              >
+                                <div className="flex justify-between items-start mb-3">
+                                  <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm" onClick={() => handleEditOpportunity(opportunity)}>{opportunity.name}</h4>
+                                  <button onClick={(e) => { e.stopPropagation(); handleEditOpportunity(opportunity);}} className="p-1 text-gray-400 hover:text-primary-600 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><Edit className="w-3 h-3" /></button>
+                                </div>
+                                <div className="space-y-2 text-xs">
+                                  <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400"><User className="w-3 h-3" /><span>{opportunity.clientName}</span></div>
+                                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400"><DollarSign className="w-3 h-3" /><span className="font-medium">R$ {opportunity.value.toLocaleString()}</span></div>
+                                  {opportunity.expectedCloseDate && <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400"><Flag className="w-3 h-3" /><span>Fechar em: {new Date(opportunity.expectedCloseDate).toLocaleDateString()}</span></div>}
+                                  {opportunity.nextAction && (<div className="mt-2 p-2 bg-gray-50 dark:bg-gray-600 rounded text-xs text-gray-700 dark:text-gray-300"><strong>Próxima ação:</strong> {opportunity.nextAction}</div>)}
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </div>
+                    </Card>
+                  </div>
+                )}
+              </Droppable>
+            );
+          })}
+        </div>
+      </DragDropContext>
+      
       <Modal isOpen={isOpportunityModalOpen} onClose={() => setIsOpportunityModalOpen(false)} title={selectedOpportunity ? "Editar Oportunidade" : "Nova Oportunidade"}>
         <OpportunityForm opportunity={selectedOpportunity} onClose={() => setIsOpportunityModalOpen(false)} onSave={handleSaveOpportunity} />
+      </Modal>
+
+      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title="Gerar Relatório de Oportunidades">
+        <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">Selecione o período para gerar o relatório em PDF.</p>
+            <div className="flex gap-4 items-center">
+                <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500">
+                    {months.map((month, index) => <option key={month} value={index}>{month}</option>)}
+                </select>
+                <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500">
+                    {years.map(year => <option key={year} value={year}>{year}</option>)}
+                </select>
+            </div>
+             <div className="flex justify-end gap-3 pt-4">
+                <Button variant="ghost" onClick={() => setIsReportModalOpen(false)}>Cancelar</Button>
+                <Button onClick={handleGeneratePdf}>Gerar PDF</Button>
+            </div>
+        </div>
       </Modal>
     </div>
   );

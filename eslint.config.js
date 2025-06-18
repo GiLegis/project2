@@ -1,28 +1,26 @@
-import js from '@eslint/js';
-import globals from 'globals';
-import reactHooks from 'eslint-plugin-react-hooks';
-import reactRefresh from 'eslint-plugin-react-refresh';
-import tseslint from 'typescript-eslint';
+import globals from "globals";
+import pluginJs from "@eslint/js";
+import tseslint from "typescript-eslint";
+import pluginReactConfig from "eslint-plugin-react/configs/recommended.js";
+import { fixupConfigRules } from "@eslint/compat";
 
-export default tseslint.config(
-  { ignores: ['dist'] },
+export default [
+  { languageOptions: { globals: globals.browser } },
+  pluginJs.configs.recommended,
+  ...tseslint.configs.recommended,
+  // Aplica as regras recomendadas para React, corrigindo a compatibilidade
+  ...fixupConfigRules(pluginReactConfig), 
   {
-    extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['**/*.{ts,tsx}'],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
-    },
-    plugins: {
-      'react-hooks': reactHooks,
-      'react-refresh': reactRefresh,
+    // Adiciona regras específicas para melhorar a experiência com React
+    settings: {
+      react: {
+        version: "detect" // Detecta automaticamente a versão do React
+      }
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
-    },
+      "react/react-in-jsx-scope": "off", // Desliga a necessidade de importar React em todos os arquivos
+      "react/jsx-uses-react": "off",    // Mesma regra acima, para consistência
+      "react/prop-types": "off"         // Desliga a necessidade de prop-types, já que usamos TypeScript
+    }
   }
-);
+];

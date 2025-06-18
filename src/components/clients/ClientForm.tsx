@@ -3,7 +3,7 @@ import { Client } from '../../types';
 import { Button } from '../ui/Button';
 import citiesData from '../../utils/brazil-cities.json';
 
-// Objeto para mapear o código da UF para a sigla, como você sugeriu.
+// Objeto para mapear o código da UF para a sigla
 const codigoUfParaSigla: { [key: number]: string } = {
     11: 'RO', 12: 'AC', 13: 'AM', 14: 'RR', 15: 'PA', 16: 'AP', 17: 'TO',
     21: 'MA', 22: 'PI', 23: 'CE', 24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL', 28: 'SE', 29: 'BA',
@@ -12,8 +12,9 @@ const codigoUfParaSigla: { [key: number]: string } = {
     50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF'
 };
 
+// CORREÇÃO: Adicionado tipo para a propriedade client
 interface ClientFormProps {
-  client: Omit<Client, 'id' | 'createdAt' | 'createdBy'> | null;
+  client: Client | null;
   onClose: () => void;
   onSave: (data: Omit<Client, 'id' | 'createdAt' | 'createdBy'>) => void;
 }
@@ -31,7 +32,6 @@ export const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSave 
     estado: client?.estado || '',
   });
 
-  // Gera a lista de UFs a partir do nosso mapa de códigos
   const states = useMemo(() => {
     return Object.values(codigoUfParaSigla).sort();
   }, []);
@@ -39,12 +39,26 @@ export const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSave 
   const [availableCities, setAvailableCities] = useState<string[]>([]);
 
   useEffect(() => {
+    if (client) {
+        setFormData({
+            nomeCompleto: client.nomeCompleto || '',
+            email: client.email || '',
+            telefone: client.telefone || '',
+            origem: client.origem || '',
+            status: client.status || 'Novo',
+            valorPotencial: client.valorPotencial || 0,
+            observacoes: client.observacoes || '',
+            cidade: client.cidade || '',
+            estado: client.estado || '',
+        });
+    }
+  }, [client]);
+
+  useEffect(() => {
     if (formData.estado) {
-      // Encontra o código UF correspondente à sigla do estado selecionado
       const ufCode = Object.keys(codigoUfParaSigla).find(key => codigoUfParaSigla[parseInt(key)] === formData.estado);
       
       if (ufCode) {
-        // Filtra as cidades usando o código UF numérico
         const citiesInState = citiesData
           .filter(city => city.codigo_uf === parseInt(ufCode))
           .map(city => city.nome)
