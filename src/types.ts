@@ -11,6 +11,8 @@ export interface Client {
   observacoes: string;
   createdAt: string;
   createdBy?: string;
+  cidade?: string;   // <-- Linha necessária
+  estado?: string;   // <-- Linha necessária
 }
 
 export interface Opportunity {
@@ -21,7 +23,7 @@ export interface Opportunity {
   status: string;
   nextAction: string;
   description: string;
-  createdAt: Date;
+  createdAt: string;
   expectedCloseDate?: string;
 }
 

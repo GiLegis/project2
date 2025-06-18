@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Filter, Edit, Trash2, Phone, Mail, User } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Trash2, Phone, Mail } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -98,7 +98,6 @@ export const ClientsList: React.FC<ClientsListProps> = ({ currentUser }) => {
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
-      {/* O resto do JSX continua igual... */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div><h2 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100">Clientes</h2><p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie seus clientes e leads</p></div>
         <Button onClick={handleAddClient} className="flex items-center gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" />Novo Cliente</Button>
@@ -120,7 +119,7 @@ export const ClientsList: React.FC<ClientsListProps> = ({ currentUser }) => {
       </Card>
       <AnimatePresence>
         {filteredClients.length === 0 ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Card className="text-center py-12"><User className="w-16 h-16 text-gray-400 mx-auto mb-4" /><h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Nenhum cliente encontrado</h3><p className="text-gray-600 dark:text-gray-400 mb-6">Comece adicionando seu primeiro cliente</p><Button onClick={handleAddClient}>Adicionar Primeiro Cliente</Button></Card></motion.div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Card className="text-center py-12"><Plus className="w-16 h-16 text-gray-400 mx-auto mb-4" /><h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Nenhum cliente encontrado</h3><p className="text-gray-600 dark:text-gray-400 mb-6">Comece adicionando seu primeiro cliente</p><Button onClick={handleAddClient}>Adicionar Primeiro Cliente</Button></Card></motion.div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
             {filteredClients.map((client) => (
