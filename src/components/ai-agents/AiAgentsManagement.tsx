@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Bot, Settings, Play, Pause, Trash2, Edit, Sparkles } from 'lucide-react';
+import { Plus, Bot, Settings, Play, Pause, Trash2, Edit, Sparkles, MessageCircle } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { AiAgentForm } from './AiAgentForm';
+import { AgentChat } from './AgentChat';
+import { getAgentStats } from '../../services/chatHistoryService';
 
 interface AiAgent {
   id: string;
@@ -26,6 +28,40 @@ export const AiAgentsManagement: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState<AiAgent | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<AiAgent | null>(null);
+  const [chatAgent, setChatAgent] = useState<AiAgent | null>(null);
+  const [agentStats, setAgentStats] = useState<{ [key: string]: any }>({});
+
+  // Carregar agentes do localStorage
+  useEffect(() => {
+    const savedAgents = localStorage.getItem('crm_ai_agents');
+    if (savedAgents) {
+      try {
+        const parsedAgents = JSON.parse(savedAgents).map((agent: any) => ({
+          ...agent,
+          createdAt: new Date(agent.createdAt),
+          lastUsed: agent.lastUsed ? new Date(agent.lastUsed) : undefined
+        }));
+        setAgents(parsedAgents);
+      } catch (error) {
+        console.error('Erro ao carregar agentes:', error);
+      }
+    }
+  }, []);
+
+  // Carregar estatísticas dos agentes
+  useEffect(() => {
+    const stats: { [key: string]: any } = {};
+    agents.forEach(agent => {
+      stats[agent.id] = getAgentStats(agent.id);
+    });
+    setAgentStats(stats);
+  }, [agents]);
+
+  // Salvar agentes no localStorage
+  const saveAgents = (updatedAgents: AiAgent[]) => {
+    localStorage.setItem('crm_ai_agents', JSON.stringify(updatedAgents));
+    setAgents(updatedAgents);
+  };
 
   const handleAddAgent = () => {
     setSelectedAgent(null);
@@ -44,7 +80,8 @@ export const AiAgentsManagement: React.FC = () => {
 
   const handleConfirmDelete = () => {
     if (agentToDelete) {
-      setAgents(prev => prev.filter(a => a.id !== agentToDelete.id));
+      const updatedAgents = agents.filter(a => a.id !== agentToDelete.id);
+      saveAgents(updatedAgents);
       setAgentToDelete(null);
       setIsDeleteConfirmOpen(false);
     }
@@ -52,28 +89,43 @@ export const AiAgentsManagement: React.FC = () => {
 
   const handleSaveAgent = (formData: Omit<AiAgent, 'id' | 'createdAt'>) => {
     if (selectedAgent) {
-      setAgents(prev => prev.map(a => 
+      // Editar agente existente
+      const updatedAgents = agents.map(a => 
         a.id === selectedAgent.id 
-          ? { ...a, ...formData }
+          ? { ...selectedAgent, ...formData }
           : a
-      ));
+      );
+      saveAgents(updatedAgents);
     } else {
+      // Criar novo agente
       const newAgent: AiAgent = {
         ...formData,
         id: Date.now().toString(),
         createdAt: new Date()
       };
-      setAgents(prev => [...prev, newAgent]);
+      saveAgents([...agents, newAgent]);
     }
     setIsAgentModalOpen(false);
   };
 
   const handleToggleAgent = (agentId: string) => {
-    setAgents(prev => prev.map(agent => 
+    const updatedAgents = agents.map(agent => 
       agent.id === agentId 
         ? { ...agent, isActive: !agent.isActive }
         : agent
-    ));
+    );
+    saveAgents(updatedAgents);
+  };
+
+  const handleOpenChat = (agent: AiAgent) => {
+    // Atualizar lastUsed
+    const updatedAgents = agents.map(a => 
+      a.id === agent.id 
+        ? { ...a, lastUsed: new Date() }
+        : a
+    );
+    saveAgents(updatedAgents);
+    setChatAgent(agent);
   };
 
   const getModelColor = (model: string) => {
@@ -81,9 +133,23 @@ export const AiAgentsManagement: React.FC = () => {
       case 'gpt-4': return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
       case 'gpt-3.5-turbo': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
       case 'claude-3': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400';
+      case 'gemini-pro': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
   };
+
+  // Se um agente está selecionado para chat, mostrar a interface de chat
+  if (chatAgent) {
+    return (
+      <div className="h-full">
+        <AgentChat
+          agent={chatAgent}
+          onBack={() => setChatAgent(null)}
+          onEditAgent={handleEditAgent}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -97,7 +163,7 @@ export const AiAgentsManagement: React.FC = () => {
             Agentes de IA
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Configure e gerencie seus assistentes de IA
+            Configure e converse com seus assistentes de IA
           </p>
         </div>
         <Button onClick={handleAddAgent} className="flex items-center gap-2">
@@ -120,7 +186,7 @@ export const AiAgentsManagement: React.FC = () => {
                 Nenhum agente configurado
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Crie seu primeiro agente de IA para automatizar tarefas
+                Crie seu primeiro agente de IA para automatizar tarefas e conversas
               </p>
               <Button onClick={handleAddAgent}>
                 Criar Primeiro Agente
@@ -161,6 +227,13 @@ export const AiAgentsManagement: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <button
+                        onClick={() => handleOpenChat(agent)}
+                        className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                        title="Conversar"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleToggleAgent(agent.id)}
                         className={`p-2 rounded-lg transition-colors ${
@@ -210,6 +283,19 @@ export const AiAgentsManagement: React.FC = () => {
                         {agent.maxTokens}
                       </span>
                     </div>
+
+                    {/* Estatísticas do Chat */}
+                    {agentStats[agent.id] && agentStats[agent.id].totalMessages > 0 && (
+                      <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">Mensagens</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {agentStats[agent.id].totalMessages}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {agent.triggerEvents.length > 0 && (
                       <div>
                         <span className="text-sm text-gray-500 dark:text-gray-400">Eventos:</span>
@@ -272,7 +358,7 @@ export const AiAgentsManagement: React.FC = () => {
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
             Tem certeza que deseja excluir o agente "{agentToDelete?.name}"? 
-            Esta ação não pode ser desfeita.
+            Esta ação não pode ser desfeita e todo o histórico de conversas será perdido.
           </p>
           <div className="flex gap-3 justify-center">
             <Button
